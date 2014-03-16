@@ -1,0 +1,46 @@
+RaspiFPV: FPV (First Person View) tools for Raspberry Pi
+========================================================
+
+This software implements a Raspberry Pi-based VTX/RTX+OSD facility for FPV (First Person View).
+
+'raspifpvtx' creates and runs a GStreamer pipeline to receive video from the Raspicam, compress using the Raspi's H264 hardware encoder and broadcast over UDP. It also receives various inputs from voltage/current sensors via the MCP3008 ADC, and GPS information over a serial line from the NAZA GPS.
+
+'raspifpvrx' creates and runs a GGtreamer pipeline to receive and display video received over UDP. It also receives telemetry from the airframe and displays an OSD (On Screen Display).
+
+Airframe Usage:
+
+    raspifpvtx [options]
+
+Ground Station Usage:
+
+    raspifpvrx [options]
+
+
+Pod <monsieur.pod@gmail.com>
+
+
+License
+-------
+
+Copyright (C) 2014 Pod <monsieur.pod@gmail.com>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+Credits
+-------
+
+Contains a partial C port (geometry.c) of the Euclid graphics maths module
+
+Copyright (c) 2006 Alex Holkner <Alex.Holkner@mail.google.com>

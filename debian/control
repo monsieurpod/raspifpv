@@ -1,0 +1,22 @@
+Source: raspifpv
+Section: embedded
+Priority: optional
+Maintainer: Pod <monsieur.pod@gmail.com>
+Build-Depends: debhelper (>= 8.0.0),
+               autotools-dev,
+               libcairo2-dev,
+               libgstreamer1.0-dev
+Standards-Version: 3.9.4
+
+Package: raspifpv
+Section: embedded
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         gstreamer1.0-plugins-good,
+         gstreamer1.0-plugins-bad,
+         gstreamer1.0-omx
+Description: Software for a Raspberry Pi-based FPV
+ This package contains software for a Raspberry Pi and GStreamer-based FPV
+ (First Person View) setup.
+
