@@ -26,7 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "common.h"
-#include "render.h"
+#include "cairo_renderer.h"
 #include "telemetry_rx.h"
 
 static const char * GST_PIPELINE_RECEIVE = "udpsrc multicast-group=%s port=%d caps=\"application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)H264\" ! rtph264depay";
@@ -49,13 +49,13 @@ static void prepare_overlay(GstElement * overlay, GstCaps * caps, gpointer user_
         return;
     }
 
-    FPVRenderer * renderer = (FPVRenderer*)user_data;
-    fpv_renderer_set_frame_size(renderer, GST_VIDEO_INFO_WIDTH(&vinfo), GST_VIDEO_INFO_HEIGHT(&vinfo));
+    FPVCairoRenderer * renderer = (FPVCairoRenderer*)user_data;
+    fpv_cairo_renderer_set_frame_size(renderer, GST_VIDEO_INFO_WIDTH(&vinfo), GST_VIDEO_INFO_HEIGHT(&vinfo));
 }
 
 static void draw_overlay(GstElement * overlay, cairo_t * cr, guint64 timestamp, guint64 duration, gpointer user_data) {
-    FPVRenderer * renderer = (FPVRenderer*)user_data;
-    fpv_renderer_render(renderer, cr, timestamp);
+    FPVCairoRenderer * renderer = (FPVCairoRenderer*)user_data;
+    fpv_cairo_renderer_render(renderer, cr, timestamp);
 }
 
 static gboolean on_message(GstBus * bus, GstMessage * message, gpointer user_data) {
@@ -88,7 +88,7 @@ static gboolean on_message(GstBus * bus, GstMessage * message, gpointer user_dat
     return TRUE;
 }
 
-static GstPipeline* init_gst_pipeline(GKeyFile * keyfile, FPVRenderer *renderer) {
+static GstPipeline* init_gst_pipeline(GKeyFile * keyfile, FPVCairoRenderer *renderer) {
 
     char * multicast_addr = keyfile ? g_key_file_get_string(keyfile, "Networking", "multicast_address", NULL) : NULL;
     int port = keyfile ? g_key_file_get_integer(keyfile, "Networking", "video_port", NULL) : 0;
@@ -143,14 +143,14 @@ static FPVTelemetryRX* init_telemetry_rx(GKeyFile *keyfile) {
     return telemetry_rx;
 }
 
-static FPVRenderer* init_renderer(GKeyFile *keyfile, FPVTelemetryRX * telemetry_rx) {
-    FPVRenderer *renderer = fpv_renderer_new(telemetry_rx);
+static FPVCairoRenderer* init_renderer(GKeyFile *keyfile, FPVTelemetryRX * telemetry_rx) {
+    FPVCairoRenderer *renderer = fpv_cairo_renderer_new(telemetry_rx);
 
     if ( renderer && keyfile ) {
         GError *error = NULL;
         gboolean show_altitude = g_key_file_get_boolean(keyfile, "Telemetry", "show_altitude", &error);
         if ( !error ) {
-            fpv_renderer_set_show_altitude(renderer, show_altitude);
+            fpv_cairo_renderer_set_show_altitude(renderer, show_altitude);
         }
     }
 
@@ -192,7 +192,7 @@ int main(int argc, char ** argv) {
     }
 
     // Init renderer
-    FPVRenderer * renderer = init_renderer(keyfile, telemetry_rx);
+    FPVCairoRenderer * renderer = init_renderer(keyfile, telemetry_rx);
     if ( !renderer ) {
         exit(1);
     }

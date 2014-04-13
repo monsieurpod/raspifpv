@@ -16,13 +16,13 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "render.h"
+#include "cairo_renderer.h"
 #include "geometry.h"
 #include <stdlib.h>
 #include <math.h>
 #include <stdio.h>
 
-struct _FPVRenderer {
+struct _FPVCairoRenderer {
     int width;
     int height;
     FPVTelemetryRX *telemetry_rx;
@@ -35,32 +35,32 @@ typedef enum {
     ALIGNMENT_RIGHT
 } Alignment;
 
-FPVRenderer * fpv_renderer_new(FPVTelemetryRX * telemetry_rx) {
-    FPVRenderer *renderer = (FPVRenderer*)calloc(1, sizeof(FPVRenderer));
+FPVCairoRenderer * fpv_cairo_renderer_new(FPVTelemetryRX * telemetry_rx) {
+    FPVCairoRenderer *renderer = (FPVCairoRenderer*)calloc(1, sizeof(FPVCairoRenderer));
     renderer->telemetry_rx = telemetry_rx;
     renderer->show_altitude = 0;
     return renderer;
 }
 
-void fpv_renderer_dispose(FPVRenderer * renderer) {
+void fpv_cairo_renderer_dispose(FPVCairoRenderer * renderer) {
     free(renderer);
 }
 
-void fpv_renderer_set_frame_size(FPVRenderer * renderer, int width, int height) {
+void fpv_cairo_renderer_set_frame_size(FPVCairoRenderer * renderer, int width, int height) {
     renderer->width = width;
     renderer->height = height;
 }
 
-void fpv_renderer_get_frame_size(FPVRenderer * renderer, int * width, int * height) {
+void fpv_cairo_renderer_get_frame_size(FPVCairoRenderer * renderer, int * width, int * height) {
     if ( width ) *width = renderer->width;
     if ( height ) *height = renderer->height;
 }
 
-void fpv_renderer_set_show_altitude(FPVRenderer * renderer, int show_altitude) {
+void fpv_cairo_renderer_set_show_altitude(FPVCairoRenderer * renderer, int show_altitude) {
     renderer->show_altitude = show_altitude;
 }
 
-int fpv_renderer_get_show_altitude(FPVRenderer * renderer) {
+int fpv_cairo_renderer_get_show_altitude(FPVCairoRenderer * renderer) {
     return renderer->show_altitude;
 }
 
@@ -86,7 +86,7 @@ static void render_text(cairo_t * cr, float x, float y, const char * text, Align
     cairo_show_text(cr, text);
 }
 
-void fpv_renderer_render(FPVRenderer * renderer, cairo_t * cr, uint64_t timestamp) {
+void fpv_cairo_renderer_render(FPVCairoRenderer * renderer, cairo_t * cr, uint64_t timestamp) {
     telemetry_rx_t telemetry = fpv_telemetry_rx_get(renderer->telemetry_rx);
 
     double home_distance;

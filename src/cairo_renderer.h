@@ -16,24 +16,24 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __RENDER_H
-#define __RENDER_H
+#ifndef __CAIRO_RENDERER_H
+#define __CAIRO_RENDERER_H
 
 #include "telemetry_rx.h"
 #include <cairo.h>
 #include <stdint.h>
 
-typedef struct _FPVRenderer FPVRenderer;
+typedef struct _FPVCairoRenderer FPVCairoRenderer;
 
-FPVRenderer * fpv_renderer_new(FPVTelemetryRX * telemetry_rx);
-void fpv_renderer_dispose(FPVRenderer * renderer);
+FPVCairoRenderer * fpv_cairo_renderer_new(FPVTelemetryRX * telemetry_rx);
+void fpv_cairo_renderer_dispose(FPVCairoRenderer * renderer);
 
-void fpv_renderer_render(FPVRenderer * renderer, cairo_t * context, uint64_t timestamp);
+void fpv_cairo_renderer_render(FPVCairoRenderer * renderer, cairo_t * context, uint64_t timestamp);
 
-void fpv_renderer_set_frame_size(FPVRenderer * renderer, int width, int height);
-void fpv_renderer_get_frame_size(FPVRenderer * renderer, int * width, int * height);
+void fpv_cairo_renderer_set_frame_size(FPVCairoRenderer * renderer, int width, int height);
+void fpv_cairo_renderer_get_frame_size(FPVCairoRenderer * renderer, int * width, int * height);
 
-void fpv_renderer_set_show_altitude(FPVRenderer * renderer, int show_altitude);
-int fpv_renderer_get_show_altitude(FPVRenderer * renderer);
+void fpv_cairo_renderer_set_show_altitude(FPVCairoRenderer * renderer, int show_altitude);
+int fpv_cairo_renderer_get_show_altitude(FPVCairoRenderer * renderer);
 
 #endif
