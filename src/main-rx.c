@@ -32,9 +32,12 @@
 static const char * GST_PIPELINE_RECEIVE = "udpsrc multicast-group=%s port=%d caps=\"application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)H264\" ! rtph264depay";
 static const char * GST_PIPELINE_OVERLAY = "autovideoconvert ! cairooverlay name=overlay";
 
-#ifdef TARGET_RPI
+#if defined(TARGET_RPI)
 static const char * GST_PIPELINE_DECODE = "h264parse ! omxh264dec";
 static const char * GST_PIPELINE_SINK = "eglglessink sync=false";
+#elif defined(TARGET_DARWIN)
+static const char * GST_PIPELINE_DECODE = "avdec_h264";
+static const char * GST_PIPELINE_SINK = "osxvideosink fullscreen=true";
 #else
 static const char * GST_PIPELINE_DECODE = "avdec_h264";
 static const char * GST_PIPELINE_SINK = "autovideosink";
@@ -213,7 +216,7 @@ int main(int argc, char ** argv) {
     gst_element_set_state(GST_ELEMENT(pipeline), GST_STATE_PLAYING);
 
     // Run main loop
-    g_main_loop_run (loop);
+    g_main_loop_run(loop);
 
     // Stop video pipeline and clean up
     gst_element_set_state(GST_ELEMENT(pipeline), GST_STATE_NULL);
