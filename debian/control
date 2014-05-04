@@ -5,7 +5,8 @@ Maintainer: Pod <monsieur.pod@gmail.com>
 Build-Depends: debhelper (>= 8.0.0),
                autotools-dev,
                libcairo2-dev,
-               libgstreamer1.0-dev
+               libgstreamer1.0-dev,
+               fonts-dejavu-core
 Standards-Version: 3.9.4
 
 Package: raspifpv
