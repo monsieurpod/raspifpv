@@ -26,12 +26,12 @@ case "$build_os" in
                 AC_DEFINE([TARGET_RPI], [1], [Whether we are building for Raspberry Pi])
                 ;;
             *)
-                AC_MSG_ERROR([Your platform is not currently supported])
+                AC_MSG_WARN([Your platform is not currently supported])
                 ;;
         esac
         ;;
     *)
-        AC_MSG_ERROR([Your platform is not currently supported])
+        AC_MSG_WARN([Your platform is not currently supported])
         ;;
 esac
 
