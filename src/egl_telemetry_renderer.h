@@ -27,4 +27,7 @@ typedef struct _FPVEGLTelemetryRenderer FPVEGLTelemetryRenderer;
 FPVEGLTelemetryRenderer * fpv_egl_telemetry_renderer_new(FPVTelemetryRX * telemetry_rx);
 void fpv_egl_telemetry_renderer_dispose(FPVEGLTelemetryRenderer * renderer);
 
+int fpv_egl_telemetry_renderer_start(FPVEGLTelemetryRenderer * renderer);
+void fpv_egl_telemetry_renderer_stop(FPVEGLTelemetryRenderer * renderer);
+    
 #endif

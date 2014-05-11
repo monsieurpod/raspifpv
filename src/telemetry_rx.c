@@ -40,7 +40,65 @@ struct _FPVTelemetryRX {
     void * callback_context;
 };
 
-static void * thread_entry(void *userinfo) {
+static void * fpv_telemetry_rx_thread_entry(void *userinfo);
+
+FPVTelemetryRX * fpv_telemetry_rx_new(char * address, int port) {
+    FPVTelemetryRX * rx = (FPVTelemetryRX*)calloc(1, sizeof(FPVTelemetryRX));
+    if ( address && strlen(address) > 0 ) {
+        if ( !inet_pton(AF_INET, address, &(rx->sourceaddr.sin_addr)) ) {
+            fprintf(stderr, "Invalid telemetry address '%s'\n", address);
+            free(rx);
+            return NULL;
+        }
+    } else {
+        rx->sourceaddr.sin_family = AF_INET;
+        rx->sourceaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    }
+    rx->sourceaddr.sin_port = htons(port);
+    return rx;
+}
+
+void fpv_telemetry_rx_dispose(FPVTelemetryRX * rx) {
+    if ( rx->running ) {
+        fpv_telemetry_rx_listener_stop(rx);
+    }
+    free(rx);
+}
+
+void fpv_telemetry_rx_set_callback(FPVTelemetryRX * rx, FPVTelemetryRXCallback callback, void * context) {
+    rx->callback_context = context;
+    rx->callback = callback;
+}
+
+telemetry_rx_t fpv_telemetry_rx_get(FPVTelemetryRX * rx) {
+    return rx->telemetry;
+}
+
+int fpv_telemetry_rx_listener_start(FPVTelemetryRX * rx) {
+    if ( rx->running ) {
+        fprintf(stderr, "FPVTelemetryRX listener already running\n");
+        return -1;
+    }
+
+    rx->running = 1;
+    int result = pthread_create(&rx->thread, NULL, fpv_telemetry_rx_thread_entry, rx);
+    if ( result != 0 ) {
+        fprintf(stderr, "Unable to launch FPVTelemetryRX listener thread: %s\n", strerror(result));
+    }
+
+    char addrstr[128];
+    printf("Listening for telemetry at %s:%d\n", inet_ntop(AF_INET, &(rx->sourceaddr.sin_addr), addrstr, sizeof(addrstr)), ntohs(rx->sourceaddr.sin_port));
+
+    return result == 0;
+}
+
+void fpv_telemetry_rx_listener_stop(FPVTelemetryRX * rx) {
+    rx->running = 0;
+    pthread_join(rx->thread, NULL);
+}
+
+
+static void * fpv_telemetry_rx_thread_entry(void *userinfo) {
     FPVTelemetryRX *rx = (FPVTelemetryRX*)userinfo;
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -48,16 +106,18 @@ static void * thread_entry(void *userinfo) {
 
     bind(sock, (struct sockaddr*)&rx->sourceaddr, sizeof(rx->sourceaddr));
 
-    struct ip_mreq group;
-    memset(&group, 0, sizeof(group));
-    group.imr_multiaddr.s_addr = rx->sourceaddr.sin_addr.s_addr;
-    group.imr_interface.s_addr = htonl(INADDR_ANY);
-    if ( setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &group, sizeof(group)) < 0 ) {
-        fprintf(stderr, "Unable to join multicast group for telemetry: %s\n", strerror(errno));
-        rx->running = 0;
-        return NULL;
+    if ( rx->sourceaddr.sin_addr.s_addr != htonl(INADDR_ANY) ) {
+        struct ip_mreq group;
+        memset(&group, 0, sizeof(group));
+        group.imr_multiaddr.s_addr = rx->sourceaddr.sin_addr.s_addr;
+        group.imr_interface.s_addr = htonl(INADDR_ANY);
+        if ( setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &group, sizeof(group)) < 0 ) {
+            fprintf(stderr, "Unable to join multicast group for telemetry: %s\n", strerror(errno));
+            rx->running = 0;
+            return NULL;
+        }
     }
-
+    
     char recvbuffer[1024];
     FPVTelemetryUpdate update;
 
@@ -100,54 +160,3 @@ static void * thread_entry(void *userinfo) {
     rx->running = 0;
     return NULL;
 }
-
-FPVTelemetryRX * fpv_telemetry_rx_new(char * address, int port) {
-    FPVTelemetryRX * rx = (FPVTelemetryRX*)calloc(1, sizeof(FPVTelemetryRX));
-    if ( !inet_pton(AF_INET, address, &(rx->sourceaddr.sin_addr)) ) {
-        fprintf(stderr, "Invalid telemetry address '%s'", address);
-        free(rx);
-        return NULL;
-    }
-    rx->sourceaddr.sin_port = htons(port);
-    return rx;
-}
-
-void fpv_telemetry_rx_dispose(FPVTelemetryRX * rx) {
-    if ( rx->running ) {
-        fpv_telemetry_rx_listener_stop(rx);
-    }
-    free(rx);
-}
-
-void fpv_telemetry_rx_set_callback(FPVTelemetryRX * rx, FPVTelemetryRXCallback callback, void * context) {
-    rx->callback_context = context;
-    rx->callback = callback;
-}
-
-telemetry_rx_t fpv_telemetry_rx_get(FPVTelemetryRX * rx) {
-    return rx->telemetry;
-}
-
-int fpv_telemetry_rx_listener_start(FPVTelemetryRX * rx) {
-    if ( rx->running ) {
-        fprintf(stderr, "FPVTelemetryRX listener already running\n");
-        return -1;
-    }
-
-    rx->running = 1;
-    int result = pthread_create(&rx->thread, NULL, thread_entry, rx);
-    if ( result != 0 ) {
-        fprintf(stderr, "Unable to launch FPVTelemetryRX listener thread: %s\n", strerror(result));
-    }
-
-    char addrstr[128];
-    printf("Listening for telemetry at %s:%d\n", inet_ntop(AF_INET, &(rx->sourceaddr.sin_addr), addrstr, sizeof(addrstr)), ntohs(rx->sourceaddr.sin_port));
-
-    return result == 0;
-}
-
-void fpv_telemetry_rx_listener_stop(FPVTelemetryRX * rx) {
-    rx->running = 0;
-    pthread_join(rx->thread, NULL);
-}
-

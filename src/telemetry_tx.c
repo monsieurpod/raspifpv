@@ -59,88 +59,16 @@ struct _FPVTelemetryTX {
     double max_rssi;
 };
 
-double read_channel(FPVTelemetryTX * tx, int channel) {
-    if ( tx->spi == NO_SPI ) return 0.0;
+#pragma mark - Forward declarations
 
-    if ( !tx->spi ) {
-        tx->spi = spi_new(tx->spi_bus, tx->spi_device);
-        if ( !tx->spi ) {
-            fprintf(stderr, "SPI-based telemetry transmission will be disabled\n");
-            tx->spi = (SPIInterface*)NO_SPI;
-            return 0.0;
-        }
-    }
+static double fpv_telemetry_tx_read_channel(FPVTelemetryTX * tx, int channel);
+static int fpv_telemetry_tx_check_power(FPVTelemetryTX * tx, FPVTelemetryUpdate *update);
+static int fpv_telemetry_tx_check_rssi(FPVTelemetryTX * tx, FPVTelemetryUpdate *update);
+static int fpv_telemetry_tx_check_position(FPVTelemetryTX * tx, FPVTelemetryUpdate *update);
+static void fpv_telemetry_tx_send_update(int socket, struct sockaddr_in * destaddr, FPVTelemetryUpdate *update);
+static void * fpv_telemetry_tx_thread_entry(void *userinfo);
 
-    uint8_t outbuf[3];
-    uint8_t inbuf[3] = {1, (8+channel) << 4, 0};
-    spi_transaction(tx->spi, inbuf, outbuf, sizeof(outbuf));
-    int output = ((outbuf[1] & 3) << 8) + outbuf[2];
-    return (double)output / (double)ADC_MAX;
-}
-
-static int check_power(FPVTelemetryTX * tx, FPVTelemetryUpdate *update) {
-    double voltage = read_channel(tx, tx->voltage_channel) / tx->max_volts;
-    double current = read_channel(tx, tx->current_channel) / tx->max_amps;
-    if ( voltage > 0.0 || current > 0.0 ) {
-        update->type = TELEMETRY_TYPE_POWER;
-        update->content.power.voltage = voltage;
-        update->content.power.current = current;
-        return 1;
-    }
-    return 0;
-}
-
-static int check_rssi(FPVTelemetryTX * tx, FPVTelemetryUpdate *update) {
-    return 0;
-}
-
-static int check_position(FPVTelemetryTX * tx, FPVTelemetryUpdate *update) {
-    return 0;
-}
-
-void send_update(int socket, struct sockaddr_in * destaddr, FPVTelemetryUpdate *update) {
-    XDR xdrs;
-    char sendbuffer[1024];
-    xdrmem_create(&xdrs, sendbuffer, sizeof(sendbuffer), XDR_ENCODE);
-    if ( xdr_telemetry_update(&xdrs, update) ) {
-        int length = xdr_getpos(&xdrs);
-        sendto(socket, sendbuffer, length, 0, (struct sockaddr*)destaddr, sizeof(*destaddr));
-    }
-    xdr_destroy(&xdrs);
-}
-
-static void * thread_entry(void *userinfo) {
-    FPVTelemetryTX *tx = (FPVTelemetryTX*)userinfo;
-    int sock = socket(AF_INET, SOCK_DGRAM, 0);
-
-    u_char loop = 0;
-    setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop));
-
-    FPVTelemetryUpdate update;
-
-    int update_interval = UPDATE_INTERVAL * 1e6;
-
-    while ( tx->running ) {
-        memset(&update, 0, sizeof(update));
-        if ( check_power(tx, &update) ) {
-            send_update(sock, &tx->destaddr, &update);
-        }
-        memset(&update, 0, sizeof(update));
-        if ( check_rssi(tx, &update) ) {
-            send_update(sock, &tx->destaddr, &update);
-        }
-        memset(&update, 0, sizeof(update));
-        if ( check_position(tx, &update) ) {
-            send_update(sock, &tx->destaddr, &update);
-        }
-        usleep(update_interval);
-    }
-
-    close(sock);
-    sock = 0;
-    tx->running = 0;
-    return NULL;
-}
+#pragma mark -
 
 FPVTelemetryTX * fpv_telemetry_tx_new(char * address, int port) {
     FPVTelemetryTX * tx = (FPVTelemetryTX*)calloc(1, sizeof(FPVTelemetryTX));
@@ -178,7 +106,7 @@ int fpv_telemetry_tx_sender_start(FPVTelemetryTX * tx) {
     }
 
     tx->running = 1;
-    int result = pthread_create(&tx->thread, NULL, thread_entry, tx);
+    int result = pthread_create(&tx->thread, NULL, fpv_telemetry_tx_thread_entry, tx);
     if ( result != 0 ) {
         fprintf(stderr, "Unable to launch FPVTelemetryTX sender thread: %s\n", strerror(result));
     }
@@ -244,5 +172,89 @@ void fpv_telemetry_tx_get_rssi_sensor(FPVTelemetryTX * tx, int *adc_channel, dou
     if ( adc_channel ) *adc_channel = tx->rssi_channel;
     if ( min_rssi ) *min_rssi = tx->min_rssi;
     if ( max_rssi ) *max_rssi = tx->max_rssi;
+}
+
+
+static double fpv_telemetry_tx_read_channel(FPVTelemetryTX * tx, int channel) {
+    if ( tx->spi == NO_SPI ) return 0.0;
+
+    if ( !tx->spi ) {
+        tx->spi = spi_new(tx->spi_bus, tx->spi_device);
+        if ( !tx->spi ) {
+            fprintf(stderr, "SPI-based telemetry transmission will be disabled\n");
+            tx->spi = (SPIInterface*)NO_SPI;
+            return 0.0;
+        }
+    }
+
+    uint8_t outbuf[3];
+    uint8_t inbuf[3] = {1, (8+channel) << 4, 0};
+    spi_transaction(tx->spi, inbuf, outbuf, sizeof(outbuf));
+    int output = ((outbuf[1] & 3) << 8) + outbuf[2];
+    return (double)output / (double)ADC_MAX;
+}
+
+static int fpv_telemetry_tx_check_power(FPVTelemetryTX * tx, FPVTelemetryUpdate *update) {
+    double voltage = fpv_telemetry_tx_read_channel(tx, tx->voltage_channel) / tx->max_volts;
+    double current = fpv_telemetry_tx_read_channel(tx, tx->current_channel) / tx->max_amps;
+    if ( voltage > 0.0 || current > 0.0 ) {
+        update->type = TELEMETRY_TYPE_POWER;
+        update->content.power.voltage = voltage;
+        update->content.power.current = current;
+        return 1;
+    }
+    return 0;
+}
+
+static int fpv_telemetry_tx_check_rssi(FPVTelemetryTX * tx, FPVTelemetryUpdate *update) {
+    return 0;
+}
+
+static int fpv_telemetry_tx_check_position(FPVTelemetryTX * tx, FPVTelemetryUpdate *update) {
+    return 0;
+}
+
+static void fpv_telemetry_tx_send_update(int socket, struct sockaddr_in * destaddr, FPVTelemetryUpdate *update) {
+    XDR xdrs;
+    char sendbuffer[1024];
+    xdrmem_create(&xdrs, sendbuffer, sizeof(sendbuffer), XDR_ENCODE);
+    if ( xdr_telemetry_update(&xdrs, update) ) {
+        int length = xdr_getpos(&xdrs);
+        sendto(socket, sendbuffer, length, 0, (struct sockaddr*)destaddr, sizeof(*destaddr));
+    }
+    xdr_destroy(&xdrs);
+}
+
+static void * fpv_telemetry_tx_thread_entry(void *userinfo) {
+    FPVTelemetryTX *tx = (FPVTelemetryTX*)userinfo;
+    int sock = socket(AF_INET, SOCK_DGRAM, 0);
+
+    u_char loop = 0;
+    setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop));
+
+    FPVTelemetryUpdate update;
+
+    int update_interval = UPDATE_INTERVAL * 1e6;
+
+    while ( tx->running ) {
+        memset(&update, 0, sizeof(update));
+        if ( fpv_telemetry_tx_check_power(tx, &update) ) {
+            fpv_telemetry_tx_send_update(sock, &tx->destaddr, &update);
+        }
+        memset(&update, 0, sizeof(update));
+        if ( fpv_telemetry_tx_check_rssi(tx, &update) ) {
+            fpv_telemetry_tx_send_update(sock, &tx->destaddr, &update);
+        }
+        memset(&update, 0, sizeof(update));
+        if ( fpv_telemetry_tx_check_position(tx, &update) ) {
+            fpv_telemetry_tx_send_update(sock, &tx->destaddr, &update);
+        }
+        usleep(update_interval);
+    }
+
+    close(sock);
+    sock = 0;
+    tx->running = 0;
+    return NULL;
 }
 

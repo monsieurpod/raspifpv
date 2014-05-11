@@ -35,7 +35,7 @@ static FPVGStreamerRenderer* init_renderer(GKeyFile * keyfile, GMainLoop *loop) 
     if ( !multicast_addr ) multicast_addr = RASPIFPV_MULTICAST_ADDR;
     if ( !port ) port = RASPIFPV_PORT_VIDEO;
     
-	FPVGStreamerRenderer *renderer = fpv_gstreamer_renderer_new(loop, multicast_addr, port);
+    FPVGStreamerRenderer *renderer = fpv_gstreamer_renderer_new(loop, multicast_addr, port);
     return renderer;
 }
 
@@ -49,8 +49,8 @@ static FPVTelemetryRX* init_telemetry_rx(GKeyFile *keyfile) {
 }
 
 static FPVEGLTelemetryRenderer* init_telemetry_renderer(GKeyFile * keyfile, FPVTelemetryRX * telemetry) {
-	FPVEGLTelemetryRenderer * renderer = fpv_egl_telemetry_renderer_new(telemetry);
-	return renderer;
+    FPVEGLTelemetryRenderer * renderer = fpv_egl_telemetry_renderer_new(telemetry);
+    return renderer;
 }
 
 static char *config_path = NULL;
@@ -84,12 +84,14 @@ int main(int argc, char ** argv) {
     // Init telemetry receiver
     FPVTelemetryRX * telemetry_rx = init_telemetry_rx(keyfile);
     if ( !telemetry_rx ) {
+        g_print("Couldn't init telemetry receiver\n");
         exit(1);
     }
 
     // Init telemetry renderer
     FPVEGLTelemetryRenderer * telemetry_renderer = init_telemetry_renderer(keyfile, telemetry_rx);
     if ( !telemetry_renderer ) {
+        g_print("Couldn't init telemetry renderer\n");
         exit(1);
     }
 
@@ -98,23 +100,29 @@ int main(int argc, char ** argv) {
 
     // Init renderer
     gst_init(&argc, &argv);
-	FPVGStreamerRenderer *renderer = init_renderer(keyfile, loop);
+    FPVGStreamerRenderer *renderer = init_renderer(keyfile, loop);
+    if ( !renderer ) {
+        g_print("Couldn't init renderer\n");
+        exit(1);
+    }
 
     // Start telemetry receiver
     int started = fpv_telemetry_rx_listener_start(telemetry_rx);
     g_assert(started);
 
     // Start video pipeline
-	fpv_gstreamer_renderer_start(renderer);
-
+    fpv_gstreamer_renderer_start(renderer);
+    
     // Run main loop
     g_main_loop_run(loop);
-
+    
+    g_print("Shutting down\n");
+    
     // Stop video pipeline and clean up
-	fpv_gstreamer_renderer_stop(renderer);
+    fpv_gstreamer_renderer_stop(renderer);
     g_main_destroy(loop);
-	fpv_gstreamer_renderer_dispose(renderer);
-	fpv_egl_telemetry_renderer_dispose(telemetry_renderer);
+    fpv_gstreamer_renderer_dispose(renderer);
+    fpv_egl_telemetry_renderer_dispose(telemetry_renderer);
     fpv_telemetry_rx_dispose(telemetry_rx);
     if ( keyfile ) g_key_file_free(keyfile);
 
