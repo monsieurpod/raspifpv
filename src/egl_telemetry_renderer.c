@@ -16,7 +16,7 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "egl_renderer.h"
+#include "egl_telemetry_renderer.h"
 #include <bcm_host.h>
 #include <EGL/egl.h>
 #include <VG/openvg.h>
@@ -24,11 +24,11 @@
 #include FT_FREETYPE_H
 #include FT_STROKER_H
 
-static const int LAYER_NUMBER = 1;
+static const int LAYER_NUMBER = 2;
 static const char * FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
 static const float FONT_SIZE = 0.05;
 
-struct _FPVEGLRenderer {
+struct _FPVEGLTelemetryRenderer {
     int width;
     int height;
     FPVTelemetryRX *telemetry_rx;
@@ -51,20 +51,27 @@ typedef enum {
     ALIGNMENT_RIGHT
 } Alignment;
 
-int fpv_egl_init_window(FPVEGLRenderer * renderer);
-int fpv_egl_init_vg(FPVEGLRenderer * renderer);
-int fpv_egl_init_font(FPVEGLRenderer * renderer);
-void fpv_egl_cleanup_window(FPVEGLRenderer * renderer);
-void fpv_egl_cleanup_vg(FPVEGLRenderer * renderer);
-void fpv_egl_cleanup_font(FPVEGLRenderer * renderer);
+typedef struct {
+	float x;
+	float y;
+} Point;
 
+static inline Point FPVEGLPointMake(float x, float y) { return (Point){x, y}; };
 
-FPVEGLRenderer * fpv_egl_renderer_new(FPVTelemetryRX * telemetry_rx) {
-    FPVEGLRenderer *renderer = (FPVEGLRenderer*)calloc(1, sizeof(FPVEGLRenderer));
+static int fpv_egl_init_window(FPVEGLTelemetryRenderer * renderer);
+static int fpv_egl_init_vg(FPVEGLTelemetryRenderer * renderer);
+static int fpv_egl_init_font(FPVEGLTelemetryRenderer * renderer);
+static void fpv_egl_cleanup_window(FPVEGLTelemetryRenderer * renderer);
+static void fpv_egl_cleanup_vg(FPVEGLTelemetryRenderer * renderer);
+static void fpv_egl_cleanup_font(FPVEGLTelemetryRenderer * renderer);
+static void fpv_egl_telemetry_renderer_callback(FPVTelemetryRX * rx, FPVTelemetryUpdate * update, void * context);
+static void fpv_egl_telemetry_renderer_render(FPVEGLTelemetryRenderer * renderer);
+static void fpv_egl_telemetry_renderer_draw_text(FPVEGLTelemetryRenderer * renderer, char * text, Point location, Alignment alignment);
+
+FPVEGLTelemetryRenderer * fpv_egl_telemetry_renderer_new(FPVTelemetryRX * telemetry_rx) {
+    FPVEGLTelemetryRenderer *renderer = (FPVEGLTelemetryRenderer*)calloc(1, sizeof(FPVEGLTelemetryRenderer));
     renderer->telemetry_rx = telemetry_rx;
     renderer->show_altitude = 0;
-
-    bcm_host_init();
 
     if ( !fpv_egl_init_window(renderer) ) {
         free(renderer);
@@ -83,23 +90,28 @@ FPVEGLRenderer * fpv_egl_renderer_new(FPVTelemetryRX * telemetry_rx) {
         free(renderer);
         return NULL;
     }
+	
+	fpv_telemetry_rx_set_callback(telemetry_rx, fpv_egl_telemetry_renderer_callback, renderer);
 
     return renderer;
 }
 
-void fpv_egl_renderer_dispose(FPVEGLRenderer * renderer) {
+void fpv_egl_telemetry_renderer_dispose(FPVEGLTelemetryRenderer * renderer) {
+	fpv_telemetry_rx_set_callback(renderer->telemetry_rx, NULL, NULL);
     fpv_egl_cleanup_font(renderer);
     fpv_egl_cleanup_vg(renderer);
     fpv_egl_cleanup_window(renderer);
     free(renderer);
 }
 
-static int fpv_egl_init_window(FPVEGLRenderer * renderer) {
+static int fpv_egl_init_window(FPVEGLTelemetryRenderer * renderer) {
+	bcm_host_init();
+	
     uint32_t display_width;
     uint32_t display_height;
     int ret = graphics_get_display_size(0, &display_width, &display_height);
     if ( ret < 0 ) {
-        fprintf(stderr, "FPVEGLRenderer: Can't open display\n");
+        fprintf(stderr, "FPVEGLTelemetryRenderer: Can't open display\n");
         return 0;
     }
 
@@ -111,7 +123,7 @@ static int fpv_egl_init_window(FPVEGLRenderer * renderer) {
 
     renderer->dispman_display = vc_dispmanx_display_open(0);
     if ( !renderer->dispman_display ) {
-        fprintf(stderr, "FPVEGLRenderer: Can't open display\n");
+        fprintf(stderr, "FPVEGLTelemetryRenderer: Can't open display\n");
         return 0;
     }
     DISPMANX_UPDATE_HANDLE_T dispman_update = vc_dispmanx_update_start(0);
@@ -119,29 +131,29 @@ static int fpv_egl_init_window(FPVEGLRenderer * renderer) {
     vc_dispmanx_update_submit_sync(dispman_update);
 
     if ( !renderer->dispman_element ) {
-        fprintf(stderr, "FPVEGLRenderer: Can't setup dispmanx element\n");
-        vc_dispman_display_close(renderer->dispman_display);
+        fprintf(stderr, "FPVEGLTelemetryRenderer: Can't setup dispmanx element\n");
+        vc_dispmanx_display_close(renderer->dispman_display);
         return 0;
     }
 
     return 1;
 }
 
-static void fpv_egl_cleanup_window(FPVEGLRenderer * renderer) {
+static void fpv_egl_cleanup_window(FPVEGLTelemetryRenderer * renderer) {
     DISPMANX_UPDATE_HANDLE_T dispman_update = vc_dispmanx_update_start(0);
-    vc_dispmanx_element_remove(renderer->dispman_element);
+    vc_dispmanx_element_remove(dispman_update, renderer->dispman_element);
     vc_dispmanx_update_submit_sync(dispman_update);
-    vc_dispman_display_close(renderer->dispman_display);
+    vc_dispmanx_display_close(renderer->dispman_display);
 }
 
-static int fpv_egl_init_vg(FPVEGLRenderer * renderer) {
+static int fpv_egl_init_vg(FPVEGLTelemetryRenderer * renderer) {
     renderer->display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if ( !renderer->display ) {
-        fprintf(stderr, "FPVEGLRenderer: Can't get EGL display\n");
+        fprintf(stderr, "FPVEGLTelemetryRenderer: Can't get EGL display\n");
         return 0;
     }
     if ( !eglInitialize(renderer->display, NULL, NULL) ) {
-        fprintf(stderr, "FPVEGLRenderer: Can't init EGL\n");
+        fprintf(stderr, "FPVEGLTelemetryRenderer: Can't init EGL\n");
         return 0;
     }
 
@@ -157,65 +169,98 @@ static int fpv_egl_init_vg(FPVEGLRenderer * renderer) {
     EGLint configCount;
     eglChooseConfig(renderer->display, attributeList, &config, 1, &configCount);
     if ( configCount == 0 ) {
-        fprintf(stderr, "FPVEGLRenderer: Can't setup display\n");
+        fprintf(stderr, "FPVEGLTelemetryRenderer: Can't setup display\n");
         return 0;
     }
 
     if ( !eglBindAPI(EGL_OPENVG_API) ) {
-        fprintf(stderr, "FPVEGLRenderer: Can't init OpenVG API\n");
+        fprintf(stderr, "FPVEGLTelemetryRenderer: Can't init OpenVG API\n");
         return 0;
     }
 
-    const EGL_DISPMANX_WINDOW_T nativeWindow = {
-        .element = renderer->dispman_element;
+    EGL_DISPMANX_WINDOW_T nativeWindow = {
+        .element = renderer->dispman_element,
         .width = renderer->width,
         .height = renderer->height
     };
 
     renderer->surface = eglCreateWindowSurface(renderer->display, config, &nativeWindow, NULL);
     if ( !renderer->surface ) {
-        fprintf(stderr, "FPVEGLRenderer: Can't setup EGL surface\n");
+        fprintf(stderr, "FPVEGLTelemetryRenderer: Can't setup EGL surface\n");
         return 0;
     }
 
     renderer->context = eglCreateContext(renderer->display, config, EGL_NO_CONTEXT, NULL);
     if ( !renderer->context ) {
-        fprintf(stderr, "FPVEGLRenderer: Can't setup EGL context\n");
+        fprintf(stderr, "FPVEGLTelemetryRenderer: Can't setup EGL context\n");
         return 0;
     }
 
     if ( !eglMakeCurrent(renderer->display, renderer->surface, renderer->surface, renderer->context) ) {
-        fprintf(stderr, "FPVEGLRenderer: Can't init EGL context\n");
+        fprintf(stderr, "FPVEGLTelemetryRenderer: Can't init EGL context\n");
         return 0;
     }
 
-    vgSetI(VG_FILTER_FORMAT_LINEAR, VG_TRUE);
-    vgSetI(VG_IMAGE_QUALITY, VG_IMAGE_QUALITY_BETTER);
-
+    vgSeti(VG_FILTER_FORMAT_LINEAR, VG_TRUE);
+    vgSeti(VG_IMAGE_QUALITY, VG_IMAGE_QUALITY_BETTER);
 }
 
-static void fpv_egl_cleanup_vg(FPVEGLRenderer * renderer) {
+static void fpv_egl_cleanup_vg(FPVEGLTelemetryRenderer * renderer) {
     eglMakeCurrent(renderer->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     eglTerminate(renderer->display);
 }
 
-static int fpv_egl_init_font(FPVEGLRenderer * renderer) {
+static int fpv_egl_init_font(FPVEGLTelemetryRenderer * renderer) {
     if ( !FT_Init_FreeType(&renderer->ft) ||
          !FT_New_Face(renderer->ft, FONT_PATH, 0, &renderer->font_face) ||
          !FT_Set_Pixel_Sizes(renderer->font_face, 0, FONT_SIZE * (float)renderer->height) ||
-         !FT_Stroker_New(&renderer->ft, &renderer->font_stroker) ) {
-        fprintf(stderr, "FPVEGLRenderer: Can't init fonts\n");
+         !FT_Stroker_New(renderer->ft, &renderer->font_stroker) ) {
+        fprintf(stderr, "FPVEGLTelemetryRenderer: Can't init fonts\n");
         return 0;
     }
 
     FT_Stroker_Set(renderer->font_stroker, FONT_SIZE * (float)renderer->height * 0.1, FT_STROKER_LINECAP_ROUND, FT_STROKER_LINEJOIN_ROUND, 0);
 
-    
     renderer->font = vgCreateFont(0);
     renderer->font_border = vgCreateFont(0);
-
 }
 
-static void fpv_egl_cleanup_font(FPVEGLRenderer * renderer) {
+static void fpv_egl_cleanup_font(FPVEGLTelemetryRenderer * renderer) {
     FT_Done_FreeType(renderer->ft);
+}
+
+static void fpv_egl_telemetry_renderer_callback(FPVTelemetryRX * rx, FPVTelemetryUpdate * update, void * context) {
+	fpv_egl_telemetry_renderer_render((FPVEGLTelemetryRenderer*)context);
+}
+
+static void fpv_egl_telemetry_renderer_render(FPVEGLTelemetryRenderer * renderer) {
+	vgClear(0, 0, renderer->width, renderer->height);
+	
+	// TODO: Rendering
+	
+	eglSwapBuffers(renderer->display, renderer->surface);
+}
+
+static void fpv_egl_telemetry_renderer_draw_text(FPVEGLTelemetryRenderer * renderer, char * text, Point location, Alignment alignment) {
+    VGPaint paint = vgCreatePaint();
+    assert(paint);
+
+    vgSetColor(paint, 0xFFFFFFFF);
+    assert(!vgGetError());
+
+    vgSetPaint(paint, VG_FILL_PATH);
+    assert(!vgGetError());
+
+    vgDestroyPaint(paint);
+    assert(!vgGetError());
+
+    VGfloat pos[] = { location.x, location.y };
+    vgSetfv(VG_GLYPH_ORIGIN, 2, pos);
+    assert(!vgGetError());
+	
+	// TODO: Text rendering
+//     while ( text != NULL ) {
+// 	   	    vgDrawGlyph(renderer->font, glyph, VG_FILL_PATH, VG_FALSE);
+//       	assert(!vgGetError());
+//     }
 }

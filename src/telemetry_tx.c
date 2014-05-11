@@ -20,6 +20,8 @@
 #include "common.h"
 #include "telemetry_common.h"
 #include "spi.h"
+#include <rpc/types.h>
+#include <rpc/xdr.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <sys/socket.h>

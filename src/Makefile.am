@@ -3,7 +3,8 @@
 AM_CFLAGS = \
     @GLIB_CFLAGS@ \
     @GSTREAMER_CFLAGS@ \
-    @CAIRO_CFLAGS@
+    @FREETYPE_CFLAGS@ \
+    @RPI_CFLAGS@
 
 bin_PROGRAMS =
 
@@ -16,8 +17,8 @@ bin_PROGRAMS += raspifpvtx
 endif
 
 raspifpvrx_SOURCES = \
-    main-rx.c common.h render.h render.c telemetry_common.h telemetry_common.c telemetry_rx.h telemetry_rx.c \
-    geometry.h geometry.c
+    main-rx.c common.h gstreamer_renderer.h gstreamer_renderer.c egl_telemetry_renderer.h \
+    egl_telemetry_renderer.c telemetry_common.h telemetry_common.c telemetry_rx.h telemetry_rx.c
 
 raspifpvtx_SOURCES = \
     main-tx.c common.h telemetry_common.h telemetry_common.c telemetry_tx.h telemetry_tx.c spi.h spi.c
@@ -25,7 +26,9 @@ raspifpvtx_SOURCES = \
 raspifpvrx_LDADD = \
     @GLIB_LIBS@ \
     @GSTREAMER_LIBS@ \
-    @CAIRO_LIBS@
+    @FREETYPE_LIBS@ \
+    @RPI_LIBS@ \
+	@EGLGLES_LIBS@
 
 raspifpvtx_LDADD = \
     @GLIB_LIBS@ \

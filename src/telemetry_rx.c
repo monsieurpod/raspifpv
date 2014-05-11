@@ -19,6 +19,8 @@
 #include "telemetry_rx.h"
 #include "common.h"
 #include "telemetry_common.h"
+#include <rpc/types.h>
+#include <rpc/xdr.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <sys/socket.h>
@@ -35,6 +37,7 @@ struct _FPVTelemetryRX {
     struct sockaddr_in sourceaddr;
     int running;
     FPVTelemetryRXCallback callback;
+    void * callback_context;
 };
 
 static void * thread_entry(void *userinfo) {
@@ -86,7 +89,7 @@ static void * thread_entry(void *userinfo) {
                     break;
             }
             if ( rx->callback ) {
-                rx->callback(rx, &update);
+                rx->callback(rx, &update, rx->callback_context);
             }
         }
         xdr_destroy(&xdrs);
@@ -116,7 +119,8 @@ void fpv_telemetry_rx_dispose(FPVTelemetryRX * rx) {
     free(rx);
 }
 
-void fpv_telemetry_rx_set_callback(FPVTelemetryRX * rx, FPVTelemetryRXCallback callback) {
+void fpv_telemetry_rx_set_callback(FPVTelemetryRX * rx, FPVTelemetryRXCallback callback, void * context) {
+    rx->callback_context = context;
     rx->callback = callback;
 }
 

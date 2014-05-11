@@ -16,42 +16,17 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __TELEMETRY_COMMON_H
-#define __TELEMETRY_COMMON_H
+#ifndef __GSTREAMER_RENDERER_H
+#define __GSTREAMER_RENDERER_H
 
-enum {
-    TELEMETRY_TYPE_POSITION,
-    TELEMETRY_TYPE_POWER,
-    TELEMETRY_TYPE_SIGNAL
-};
+#include <glib.h>
 
-struct telemetry_position_t {
-    double latitude;
-    double longitude;
-    double altitude;
-    double bearing;
-};
+typedef struct _FPVGStreamerRenderer FPVGStreamerRenderer;
 
-struct telemetry_power_t {
-    double voltage;
-    double current;
-};
+FPVGStreamerRenderer * fpv_gstreamer_renderer_new(GMainLoop * loop, char * multicast_addr, int port);
+void fpv_gstreamer_renderer_dispose(FPVGStreamerRenderer * renderer);
 
-struct telemetry_signal_t {
-    double rssi;
-};
-
-typedef struct telemetry_update_t {
-    unsigned char type;
-    union {
-        struct telemetry_position_t position;
-        struct telemetry_power_t power;
-        struct telemetry_signal_t signal;
-    } content;
-} FPVTelemetryUpdate;
-
-typedef struct XDR XDR;
-
-int xdr_telemetry_update(XDR * xdrs, struct telemetry_update_t *header);
+void fpv_gstreamer_renderer_start(FPVGStreamerRenderer * gstrx);
+void fpv_gstreamer_renderer_stop(FPVGStreamerRenderer * gstrx);
 
 #endif

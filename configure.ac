@@ -14,6 +14,8 @@ AC_ARG_WITH(tx,
     [with_tx=check])
 
 AC_CANONICAL_BUILD
+
+dnl Check platform
 target_rpi=
 case "$build_os" in
     linux*|*BSD*)
@@ -23,16 +25,17 @@ case "$build_os" in
                 target_rpi=yes
                 AC_DEFINE([TARGET_RPI], [1], [Whether we are building for Raspberry Pi])
                 ;;
+            *)
+                AC_MSG_ERROR([Your platform is not currently supported])
+                ;;
         esac
-        ;;
-    darwin*)
-        AC_DEFINE([TARGET_DARWIN], [1], [Whether we are building for Mac OS X])
         ;;
     *)
         AC_MSG_ERROR([Your platform is not currently supported])
         ;;
 esac
 
+dnl Common libs
 PKG_CHECK_MODULES(GLIB, glib-2.0)
 AC_SUBST(GLIB_CFLAGS)
 AC_SUBST(GLIB_LIBS)
@@ -42,23 +45,50 @@ GSTREAMER_LIBS="$GSTREAMER_LIBS -lgstvideo-1.0"
 AC_SUBST(GSTREAMER_CFLAGS)
 AC_SUBST(GSTREAMER_LIBS)
 
-AS_IF([test "x$with_rx" != "xno"],
-    [PKG_CHECK_MODULES(CAIRO, cairo, 
-       [AC_SUBST(CAIRO_CFLAGS)
-        AC_SUBST(CAIRO_LIBS)
-        AC_CHECK_LIB(m, cos,
-           [LIBS="-lm $LIBS"; with_rx=yes; AC_MSG_NOTICE([Will build raspifpvrx])], 
-           [AS_IF([test "x$with_rx" != xcheck], [AC_MSG_FAILURE([--with-rx was given, but test for libm failed])])])],
-       [AS_IF([test "x$with_rx" != xcheck], [AC_MSG_FAILURE([--with-rx was given, but test for cairo failed])])])])
+PKG_CHECK_MODULES(FREETYPE, freetype2)
+AC_SUBST(FREETYPE_CFLAGS)
+AC_SUBST(FREETYPE_LIBS)
+
+dnl Check RX build
+AS_IF([test "x$with_rx" != "xno"], [
+    AC_CHECK_LIB(m, cos, [
+        LIBS="-lm $LIBS";
+        oldCFLAGS="$CPPFLAGS"
+        RPI_CFLAGS="-I/opt/vc/include -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux"
+        CPPFLAGS="$CPPFLAGS $RPI_CFLAGS"
+        AC_CHECK_HEADER([bcm_host.h], [
+            AC_SUBST(RPI_CFLAGS)
+            CPPFLAGS="$oldCPPFLAGS"
+            oldLDFLAGS="$LDFLAGS"
+            RPI_LIBS="-L/opt/vc/lib"
+            LDFLAGS="$LDFLAGS $RPI_LIBS"
+            AC_CHECK_LIB([bcm_host], [bcm_host_init], [
+                RPI_LIBS="-lbcm_host $RPI_LIBS"
+                AC_SUBST(RPI_LIBS)
+                LDFLAGS="$oldLDFLAGS"
+                AC_CHECK_LIB([EGL], [eglInitialize], [
+                    EGLGLES_LIBS="-lEGL"
+                    AC_CHECK_LIB([GLESv2], [glEnable], [
+                        EGLGLES_LIBS="-lGLESv2 $EGLGLES_LIBS"
+                        AC_SUBST(EGLGLES_LIBS)
+                        with_rx=yes
+                        AC_MSG_NOTICE([Will build raspifpvrx])
+                    ])
+                ])
+            ])
+        ])
+    ])
+])
 
 AM_CONDITIONAL(WITH_RX, [test x$with_rx = xyes])
 
-AS_IF([test "x$with_tx" != "xno"],
-   [AS_IF([test "x$target_rpi" = xyes], 
-       [AC_CHECK_HEADERS([linux/spi/spidev.h],
-            [with_tx=yes; AC_MSG_NOTICE([Will build raspifpvtx])],
-            [AS_IF([test "x$with_tx" != xcheck], [AC_MSG_FAILURE([--with-tx was given, but test for linux/spi/spidev.h failed])])])],
-       [AS_IF([test "x$with_tx" = xyes], [AC_MSG_FAILURE([--with-tx was given, but build target is not Raspberry Pi])])])])
+dnl Check TX build
+AS_IF([test "x$with_tx" != "xno"], [
+    AC_CHECK_HEADERS([linux/spi/spidev.h], [
+        with_tx=yes
+        AC_MSG_NOTICE([Will build raspifpvtx])
+    ])
+])
 
 AM_CONDITIONAL(WITH_TX, [test x$with_tx = xyes])
 

@@ -16,20 +16,15 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __EGL_RENDERER_H
-#define __EGL_RENDERER_H
+#ifndef __EGL_TELEMETRY_RENDERER_H
+#define __EGL_TELEMETRY_RENDERER_H
 
-#include <EGL/egl.h>
+#include <bcm_host.h>
 #include "telemetry_rx.h"
 
-typedef struct _FPVEGLRenderer FPVEGLRenderer;
+typedef struct _FPVEGLTelemetryRenderer FPVEGLTelemetryRenderer;
 
-FPVEGLRenderer * fpv_egl_renderer_new(FPVTelemetryRX * telemetry_rx);
-void fpv_egl_renderer_dispose(FPVEGLRenderer * renderer);
-
-void fpv_egl_renderer_render(FPVEGLRenderer * renderer, egl_t * context, uint64_t timestamp);
-
-void fpv_egl_renderer_set_show_altitude(FPVEGLRenderer * renderer, int show_altitude);
-int fpv_egl_renderer_get_show_altitude(FPVEGLRenderer * renderer);
+FPVEGLTelemetryRenderer * fpv_egl_telemetry_renderer_new(FPVTelemetryRX * telemetry_rx);
+void fpv_egl_telemetry_renderer_dispose(FPVEGLTelemetryRenderer * renderer);
 
 #endif

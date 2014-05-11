@@ -40,12 +40,12 @@ typedef struct {
 
 typedef struct _FPVTelemetryRX FPVTelemetryRX;
 
-typedef void (*FPVTelemetryRXCallback)(FPVTelemetryRX*, FPVTelemetryUpdate *update);
+typedef void (*FPVTelemetryRXCallback)(FPVTelemetryRX * rx, FPVTelemetryUpdate * update, void * context);
 
 FPVTelemetryRX * fpv_telemetry_rx_new(char * address, int port);
 void fpv_telemetry_rx_dispose(FPVTelemetryRX * rx);
 
-void fpv_telemetry_rx_set_callback(FPVTelemetryRX * rx, FPVTelemetryRXCallback callback);
+void fpv_telemetry_rx_set_callback(FPVTelemetryRX * rx, FPVTelemetryRXCallback callback, void * context);
 
 telemetry_rx_t fpv_telemetry_rx_get(FPVTelemetryRX * rx);
 
