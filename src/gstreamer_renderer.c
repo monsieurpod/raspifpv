@@ -26,6 +26,96 @@
 #include <string.h>
 #include <stdio.h>
 
+static const char * oculus_rift_frag_shader = 
+    "#extension GL_ARB_texture_rectangle : enable                                     \n"
+    "precision mediump float;                                                         \n"
+    "varying vec2 v_texcoord;                                                         \n"
+    "uniform sampler2D tex;                                                           \n"
+    "                                                                                 \n"
+    "const vec4 kappa = vec4(1.0,1.7,0.7,15.0);                                       \n"
+    "                                                                                 \n"
+    "const float screen_width = 1920.0;                                               \n"
+    "const float screen_height = 1080.0;                                              \n"
+    "                                                                                 \n"
+    "const float scaleFactor = 0.9;                                                   \n"
+    "                                                                                 \n"
+    "const vec2 leftCenter = vec2(0.25, 0.5);                                         \n"
+    "const vec2 rightCenter = vec2(0.75, 0.5);                                        \n"
+    "                                                                                 \n"
+    "const float separation = -0.05;                                                  \n"
+    "                                                                                 \n"
+    "const bool stereo_input = false;                                                 \n"
+    "                                                                                 \n"
+    "// Scales input texture coordinates for distortion.                              \n"
+    "vec2 hmdWarp(vec2 LensCenter, vec2 texCoord, vec2 Scale, vec2 ScaleIn) {         \n"
+    "    vec2 theta = (texCoord - LensCenter) * ScaleIn;                              \n"
+    "    float rSq = theta.x * theta.x + theta.y * theta.y;                           \n"
+    "    vec2 rvector = theta * (kappa.x + kappa.y * rSq +                            \n"
+    "          kappa.z * rSq * rSq + kappa.w * rSq * rSq * rSq);                      \n"
+    "    vec2 tc = LensCenter + Scale * rvector;                                      \n"
+    "    return tc;                                                                   \n"
+    "}                                                                                \n"
+    "                                                                                 \n"
+    "bool validate(vec2 tc, int eye) {                                                \n"
+    "    if ( stereo_input ) {                                                        \n"
+    "        //keep within bounds of texture                                          \n"
+    "        if ((eye == 1 && (tc.x < 0.0 || tc.x > 0.5)) ||                          \n"
+    "            (eye == 0 && (tc.x < 0.5 || tc.x > 1.0)) ||                          \n"
+    "            tc.y < 0.0 || tc.y > 1.0) {                                          \n"
+    "            return false;                                                        \n"
+    "        }                                                                        \n"
+    "    } else {                                                                     \n"
+    "        if ( tc.x < 0.0 || tc.x > 1.0 ||                                         \n"
+    "             tc.y < 0.0 || tc.y > 1.0 ) {                                        \n"
+    "             return false;                                                       \n"
+    "        }                                                                        \n"
+    "    }                                                                            \n"
+    "    return true;                                                                 \n"
+    "}                                                                                \n"
+    "                                                                                 \n"
+    "void main() {                                                                    \n"
+    "    float as = float(screen_width / 2.0) / float(screen_height);                 \n"
+    "    vec2 Scale = vec2(0.5, as);                                                  \n"
+    "    vec2 ScaleIn = vec2(2.0 * scaleFactor, 1.0 / as * scaleFactor);              \n"
+    "                                                                                 \n"
+    "    vec2 texCoord = v_texcoord;                                                  \n"
+    "                                                                                 \n"
+    "    vec2 tc = vec2(0);                                                           \n"
+    "    vec4 color = vec4(0);                                                        \n"
+    "                                                                                 \n"
+    "    if ( texCoord.x < 0.5 ) {                                                    \n"
+    "        texCoord.x += separation;                                                \n"
+    "        texCoord = hmdWarp(leftCenter, texCoord, Scale, ScaleIn );               \n"
+    "                                                                                 \n"
+    "        if ( !stereo_input ) {                                                   \n"
+    "            texCoord.x *= 2.0;                                                   \n"
+    "        }                                                                        \n"
+    "                                                                                 \n"
+    "        color = texture2D(tex, texCoord);                                        \n"
+    "                                                                                 \n"
+    "        if ( !validate(texCoord, 0) ) {                                          \n"
+    "            color = vec4(0);                                                     \n"
+    "        }                                                                        \n"
+    "    } else {                                                                     \n"
+    "        texCoord.x -= separation;                                                \n"
+    "        texCoord = hmdWarp(rightCenter, texCoord, Scale, ScaleIn);               \n"
+    "                                                                                 \n"
+    "        if ( !stereo_input ) {                                                   \n"
+    "            texCoord.x = (texCoord.x - 0.5) * 2.0;                               \n"
+    "        }                                                                        \n"
+    "                                                                                 \n"
+    "        color = texture2D(tex, texCoord);                                        \n"
+    "                                                                                 \n"
+    "        if ( !validate(texCoord, 1) ) {                                          \n"
+    "            color = vec4(0);                                                     \n"
+    "        }                                                                        \n"
+    "    }                                                                            \n"
+    "                                                                                 \n"
+    "    gl_FragColor = color;                                                        \n"
+    "}                                                                                \n";
+
+const char * shader_source_tmp_path = "/tmp/raspifpv-shader.frag";
+
 static const int LAYER_NUMBER = 0;
 
 struct _FPVGStreamerRenderer {
@@ -36,7 +126,8 @@ struct _FPVGStreamerRenderer {
 
 static const char * GST_PIPELINE_RECEIVE = "udpsrc %s port=%d caps=\"application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)H264\" ! rtph264depay";
 static const char * GST_PIPELINE_DECODE = "h264parse ! omxh264dec";
-static const char * GST_PIPELINE_SINK = "eglglessink sync=false name=eglsink";
+static const char * GST_PIPELINE_SHADER = "glshader name=shader";
+static const char * GST_PIPELINE_SINK = "glimagesink name=sink";
 
 typedef struct
 {
@@ -65,6 +156,8 @@ FPVGStreamerRenderer * fpv_gstreamer_renderer_new(GMainLoop * loop, char * multi
     strcat(pipeline_description, " ! ");
     strcat(pipeline_description, GST_PIPELINE_DECODE);
     strcat(pipeline_description, " ! ");
+    strcat(pipeline_description, GST_PIPELINE_SHADER);
+    strcat(pipeline_description, " ! ");
     strcat(pipeline_description, GST_PIPELINE_SINK);
 
     g_debug("Pipeline: %s", pipeline_description);
@@ -77,6 +170,15 @@ FPVGStreamerRenderer * fpv_gstreamer_renderer_new(GMainLoop * loop, char * multi
         return NULL;
     }
 
+    // Load shader (write to temporary file)
+    GstElement *shader = GST_ELEMENT(gst_bin_get_by_name(GST_BIN(renderer->pipeline), "shader"));
+    g_assert(shader);
+
+    FILE * fd = fopen(shader_source_tmp_path, "w");
+    fprintf(fd, "%s", oculus_rift_frag_shader);
+    fclose(fd);
+    g_object_set(shader, "location", shader_source_tmp_path, NULL);
+    
     fpv_gstreamer_renderer_init_window(renderer);
 
     printf("Listening for video at %s:%d\n", multicast_addr && strlen(multicast_addr) > 0 ? multicast_addr : "0.0.0.0", port);
@@ -136,7 +238,7 @@ static int fpv_gstreamer_renderer_init_window(FPVGStreamerRenderer * renderer) {
         return 0;
     }
     
-    GstElement *sink = gst_bin_get_by_name(GST_BIN(renderer->pipeline), "eglsink");
+    GstElement *sink = gst_bin_get_by_name(GST_BIN(renderer->pipeline), "sink");
     g_assert(sink);
     
     RPIWindowData * window_data = g_slice_new0(RPIWindowData);
