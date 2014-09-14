@@ -50,26 +50,24 @@ AC_SUBST(FREETYPE_CFLAGS)
 AC_SUBST(FREETYPE_LIBS)
 
 dnl Check RX build
+oldCFLAGS="$CFLAGS"
+oldLDFLAGS="$LDFLAGS"
 AS_IF([test "x$with_rx" != "xno"], [
     AC_CHECK_LIB(m, cos, [
         LIBS="-lm $LIBS";
-        oldCFLAGS="$CPPFLAGS"
         RPI_CFLAGS="-I/opt/vc/include -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux"
-        CPPFLAGS="$CPPFLAGS $RPI_CFLAGS"
+        CFLAGS="$CFLAGS $RPI_CFLAGS"
         AC_CHECK_HEADER([bcm_host.h], [
             AC_SUBST(RPI_CFLAGS)
-            CPPFLAGS="$oldCPPFLAGS"
-            oldLDFLAGS="$LDFLAGS"
             RPI_LIBS="-L/opt/vc/lib"
             LDFLAGS="$LDFLAGS $RPI_LIBS"
             AC_CHECK_LIB([bcm_host], [bcm_host_init], [
                 RPI_LIBS="-lbcm_host $RPI_LIBS"
                 AC_SUBST(RPI_LIBS)
-                LDFLAGS="$oldLDFLAGS"
+                EGLGLES_LIBS="$RPI_LIBS -lEGL -lGLESv2"
+                LDFLAGS="$LDFLAGS $EGLGLES_LIBS"
                 AC_CHECK_LIB([EGL], [eglInitialize], [
-                    EGLGLES_LIBS="-lEGL"
                     AC_CHECK_LIB([GLESv2], [glEnable], [
-                        EGLGLES_LIBS="-lGLESv2 $EGLGLES_LIBS"
                         AC_SUBST(EGLGLES_LIBS)
                         with_rx=yes
                         AC_MSG_NOTICE([Will build raspifpvrx])
@@ -79,6 +77,8 @@ AS_IF([test "x$with_rx" != "xno"], [
         ])
     ])
 ])
+CFLAGS="$oldCFLAGS"
+LDFLAGS="$oldLDFLAGS"
 
 AM_CONDITIONAL(WITH_RX, [test x$with_rx = xyes])
 
