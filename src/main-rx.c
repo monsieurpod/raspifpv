@@ -113,6 +113,9 @@ int main(int argc, char ** argv) {
     // Start video pipeline
     fpv_gstreamer_renderer_start(renderer);
     
+    // Start telemetry renderer
+    fpv_egl_telemetry_renderer_start(telemetry_renderer);
+    
     // Run main loop
     g_main_loop_run(loop);
     
